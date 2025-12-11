@@ -1,0 +1,31 @@
+{
+  "projectName": "telegram-bot",
+  "app": {
+    "name": "telegram-bot",
+    "description": "Telegram bot for ID card text extraction",
+    "keywords": ["telegram", "bot", "python", "gemini", "ocr"]
+  },
+  "build": {
+    "command": "pip install -r requirements.txt",
+    "output": "."
+  },
+  "run": {
+    "command": "python main.py",
+    "instance": "1x",
+    "port": 3000
+  },
+  "env": {
+    "TELEGRAM_TOKEN": {
+      "description": "Telegram Bot Token",
+      "required": true
+    },
+    "GEMINI_API_KEY": {
+      "description": "Gemini AI API Key",
+      "required": false
+    },
+    "CYCLIC": {
+      "value": "true",
+      "description": "Cyclic.sh platform identifier"
+    }
+  }
+}
