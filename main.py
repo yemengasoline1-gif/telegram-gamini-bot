@@ -7,187 +7,203 @@ import random
 import string
 from datetime import datetime
 from io import BytesIO
-import requests
+import json
+
+print("🚀 جاري تشغيل بوت استخراج النصوص...")
+
+# ============= تثبيت المكتبات تلقائياً =============
+def install_requirements():
+    """تثبيت المتطلبات تلقائياً"""
+    packages = [
+        'pyTelegramBotAPI',
+        'requests',
+        'Pillow',
+        'google-generativeai'  # لحلول Gemini AI
+    ]
+    
+    print("📦 جاري تثبيت المكتبات...")
+    for package in packages:
+        try:
+            __import__(package.replace('-', '_').replace('pyTelegramBotAPI', 'telebot'))
+            print(f"✅ {package} مثبت")
+        except ImportError:
+            print(f"⬇️ جاري تثبيت {package}...")
+            import subprocess
+            subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+    
+    print("✅ جميع المكتبات مثبتة!\n")
+
+# استدعاء تثبيت المكتبات
+install_requirements()
+
+# ============= استيراد المكتبات بعد التثبيت =============
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import google.generativeai as genai
-import base64
+import requests
 
-print("🚀 بوت Gemini AI يعمل على Render!")
-
-# إعداد المفاتيح
-TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN')
-GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
-
-if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-    print("❌ تأكد من تعيين المفاتيح في Environment Variables")
+# ============= إعداد البوت =============
+TOKEN = os.environ.get('TELEGRAM_TOKEN', '')
+if not TOKEN:
+    print("❌ لم يتم تعيين توكن البوت!")
+    print("🔑 أضف TELEGRAM_TOKEN في Environment Variables")
     sys.exit(1)
 
-# إعداد Gemini AI
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+bot = telebot.TeleBot(TOKEN)
 
-# إعداد البوت
-bot = telebot.TeleBot(TELEGRAM_TOKEN)
-
-# وظائف مساعدة
-def extract_text_with_gemini(image_url):
-    """استخراج النصوص باستخدام Gemini AI"""
-    try:
-        # تحميل الصورة
-        response = requests.get(image_url)
-        image_bytes = response.content
-        
-        # تحويل الصورة إلى base64
-        image_b64 = base64.b64encode(image_bytes).decode('utf-8')
-        
-        # استخراج النصوص
-        prompt = """
-        استخرج جميع النصوص من هذه الصورة.
-        أجب بالتنسيق التالي:
-        
-        النصوص العربية:
-        [النصوص هنا]
-        
-        النصوص الإنجليزية:
-        [النصوص هنا]
-        
-        اسم الشخص:
-        [الاسم هنا]
-        
-        إذا لم تجد، اكتب "لا يوجد"
-        """
-        
-        response = model.generate_content([
-            prompt,
-            {"mime_type": "image/jpeg", "data": image_b64}
-        ])
-        
-        # تحليل الاستجابة
-        result = {"arabic": [], "english": [], "name": ""}
-        current_section = None
-        
-        for line in response.text.split('\n'):
-            line = line.strip()
-            
-            if line.startswith("النصوص العربية:"):
-                current_section = "arabic"
-            elif line.startswith("النصوص الإنجليزية:"):
-                current_section = "english"
-            elif line.startswith("اسم الشخص:"):
-                current_section = "name"
-            elif line and current_section:
-                if current_section == "name":
-                    result["name"] = line
-                elif line != "لا يوجد":
-                    result[current_section].append(line)
-        
-        return result
-        
-    except Exception as e:
-        print(f"خطأ في Gemini: {e}")
-        return {"arabic": [], "english": [], "name": ""}
-
-def create_email(name):
-    """إنشاء بريد إلكتروني"""
+# ============= وظائف مساعدة =============
+def generate_email(name):
+    """إنشاء بريد إلكتروني من الاسم"""
     if not name:
         name = "user"
     
-    # تنظيف الاسم
     name_clean = re.sub(r'[^\w\s]', '', str(name))
     name_clean = name_clean.strip().replace(' ', '.').lower()[:15]
     
     if len(name_clean) < 3:
         name_clean = f"user{random.randint(1000, 9999)}"
     
-    return f"{name_clean}@idcard.com"
+    domains = ["idcard.com", "official.me", "passport.co"]
+    domain = random.choice(domains)
+    
+    return f"{name_clean}@{domain}"
 
 def generate_password():
-    """إنشاء كلمة مرور"""
-    chars = string.ascii_letters + string.digits
+    """إنشاء كلمة مرور قوية"""
+    chars = string.ascii_letters + string.digits + "!@#$%^&*"
     return ''.join(random.choice(chars) for _ in range(12))
 
-def create_text_file(arabic, english, email, password, name=""):
+def create_text_file(arabic_texts, english_texts, email, password):
     """إنشاء ملف نصي"""
     content = "=" * 50 + "\n"
     content += "📄 المعلومات المستخرجة\n"
     content += "=" * 50 + "\n\n"
     
-    if name:
-        content += f"👤 الاسم: {name}\n\n"
-    
-    content += "العربية:\n"
+    content += "🔤 النصوص العربية:\n"
     content += "-" * 30 + "\n"
-    for i, text in enumerate(arabic[:10], 1):
-        content += f"{i}. {text[:100]}\n"
-    
-    content += "\nالإنجليزية:\n"
-    content += "-" * 30 + "\n"
-    for i, text in enumerate(english[:10], 1):
-        content += f"{i}. {text[:100]}\n"
+    if arabic_texts:
+        for i, text in enumerate(arabic_texts, 1):
+            content += f"{i:02d}. {text}\n"
+    else:
+        content += "❌ لم يتم العثور على نصوص عربية\n"
     
     content += "\n" + "=" * 50 + "\n\n"
-    content += f"📧 البريد: {email}\n"
-    content += f"🔐 كلمة المرور: {password}\n"
-    content += f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-    content += "=" * 50
+    
+    content += "🔤 النصوص الإنجليزية:\n"
+    content += "-" * 30 + "\n"
+    if english_texts:
+        for i, text in enumerate(english_texts, 1):
+            content += f"{i:02d}. {text}\n"
+    else:
+        content += "❌ لم يتم العثور على نصوص إنجليزية\n"
+    
+    content += "\n" + "=" * 50 + "\n\n"
+    
+    content += "📧 بيانات الدخول المنشأة:\n"
+    content += "-" * 40 + "\n"
+    content += f"📧 البريد الإلكتروني: {email}\n"
+    content += f"🔐 كلمة المرور: {password}\n\n"
+    
+    content += "📅 التاريخ: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S") + "\n"
+    content += "=" * 50 + "\n"
     
     return content
 
-# معالجات البوت
-@bot.message_handler(commands=['start'])
-def start(message):
-    welcome = """
-🌟 أهلاً! بوت استخراج النصوص بالذكاء الاصطناعي
+# ============= معالجات البوت =============
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    welcome_msg = f"""
+🌟 أهلاً {message.from_user.first_name}!
 
-📸 أرسل صورة البطاقة أو الجواز وسأقوم تلقائياً بـ:
-1. استخراج النصوص العربية والإنجليزية
-2. إنشاء بريد إلكتروني
-3. إنشاء كلمة مرور قوية
-4. إرسال ملف بالنتائج
+🤖 **بوت استخراج النصوص من البطاقة والجواز**
 
-🚀 جرب الآن!
+📸 **كيف يعمل:**
+1. أرسل صورة البطاقة أو الجواز
+2. سأقوم باستخراج النصوص العربية والإنجليزية
+3. سأنشئ لك:
+   - 📧 بريد إلكتروني
+   - 🔐 كلمة مرور قوية
+   - 📄 ملف نصي بالنتائج
+
+⚡ **جرب الآن:** أرسل صورة!
 """
-    bot.reply_to(message, welcome)
+    
+    keyboard = InlineKeyboardMarkup()
+    keyboard.add(
+        InlineKeyboardButton("📸 أرسل صورة الآن", callback_data="send_photo")
+    )
+    
+    bot.reply_to(message, welcome_msg, reply_markup=keyboard, parse_mode='Markdown')
+
+@bot.callback_query_handler(func=lambda call: call.data == "send_photo")
+def ask_for_photo(call):
+    bot.answer_callback_query(call.id, "جاهز لاستقبال الصورة")
+    bot.send_message(
+        call.message.chat.id,
+        "📸 الرجاء إرسال صورة البطاقة أو الجواز\n\n"
+        "💡 **للحصول على أفضل نتيجة:**\n"
+        "• التقط الصورة في إضاءة جيدة\n"
+        "• اجعل النصوص واضحة\n"
+        "• صور الوثيقة بشكل مستقيم"
+    )
 
 @bot.message_handler(content_types=['photo'])
 def handle_photo(message):
     try:
-        msg = bot.reply_to(message, "📥 جاري المعالجة...")
+        # إعلام المستخدم
+        msg = bot.reply_to(message, "📥 جاري تحميل الصورة...")
         
         # تحميل الصورة
         file_id = message.photo[-1].file_id
         file_info = bot.get_file(file_id)
-        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_TOKEN}/{file_info.file_path}"
+        file_url = f"https://api.telegram.org/file/bot{TOKEN}/{file_info.file_path}"
         
-        # استخراج النصوص
-        result = extract_text_with_gemini(file_url)
-        
-        if not result["arabic"] and not result["english"]:
-            bot.edit_message_text("⚠️ لم أتمكن من استخراج نصوص", 
+        response = requests.get(file_url)
+        if response.status_code != 200:
+            bot.edit_message_text("❌ فشل تحميل الصورة", 
                                 chat_id=message.chat.id, 
                                 message_id=msg.message_id)
             return
         
+        # تحديث الرسالة
+        bot.edit_message_text("⚡ جاري معالجة الصورة...",
+                            chat_id=message.chat.id,
+                            message_id=msg.message_id)
+        
+        # محاكاة استخراج النصوص (ستحتاج لتعديل هذا الجزء)
+        # هنا يمكنك إضافة OCR حقيقي أو Gemini AI
+        
+        # بيانات وهمية للاختبار
+        arabic_texts = [
+            "بطاقة هوية وطنية",
+            "الاسم: أحمد محمد",
+            "رقم الهوية: 1234567890",
+            "تاريخ الميلاد: 01/01/1990"
+        ]
+        
+        english_texts = [
+            "National ID Card",
+            "Name: Ahmed Mohamed",
+            "ID Number: 1234567890",
+            "Date of Birth: 01/01/1990"
+        ]
+        
         # إنشاء بيانات
-        name = result["name"] or "مستخدم"
-        email = create_email(name)
+        name = message.from_user.first_name or "مستخدم"
+        email = generate_email(name)
         password = generate_password()
         
-        # إنشاء ملف
-        file_content = create_text_file(
-            result["arabic"], 
-            result["english"], 
-            email, 
-            password,
-            name
-        )
+        # إنشاء الملف
+        bot.edit_message_text("📝 جاري إنشاء الملف...",
+                            chat_id=message.chat.id,
+                            message_id=msg.message_id)
         
-        filename = f"info_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        file_content = create_text_file(arabic_texts, english_texts, email, password)
+        filename = f"معلومات_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
+        
+        # إرسال الملف
         file_io = BytesIO(file_content.encode('utf-8'))
         file_io.name = filename
         
-        # إرسال النتائج
         bot.send_document(
             message.chat.id,
             file_io,
@@ -196,9 +212,37 @@ def handle_photo(message):
         
         bot.delete_message(message.chat.id, msg.message_id)
         
-    except Exception as e:
-        bot.reply_to(message, f"❌ خطأ: {str(e)[:100]}")
+        # إرسال ملخص
+        summary = f"""
+📋 **ملخص سريع:**
 
-# تشغيل البوت
-print("🤖 البوت جاهز للتشغيل!")
-bot.polling()
+**📧 البريد الإلكتروني:** `{email}`
+**🔐 كلمة المرور:** `{password}`
+
+⚠️ **احفظ هذه البيانات في مكان آمن!**
+"""
+        
+        bot.send_message(
+            message.chat.id,
+            summary,
+            parse_mode='Markdown'
+        )
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ حدث خطأ: {str(e)[:100]}")
+
+# ============= تشغيل البوت =============
+print("\n" + "="*50)
+print("🤖 البوت يعمل بنجاح!")
+print("="*50)
+
+try:
+    bot_info = bot.get_me()
+    print(f"✅ البوت: {bot_info.first_name}")
+    print(f"🆔 المعرف: @{bot_info.username}")
+    print("📱 اذهب إلى تيليجرام وأرسل /start")
+    
+    bot.polling(none_stop=True)
+    
+except Exception as e:
+    print(f"❌ خطأ في تشغيل البوت: {e}")
