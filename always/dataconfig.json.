@@ -1,0 +1,17 @@
+{
+  "type": "python",
+  "version": "3.11",
+  "startup_file": "main.py",
+  "requirements_file": "requirements.txt",
+  "environment": {
+    "TELEGRAM_TOKEN": "your_token_here",
+    "GEMINI_API_KEY": "your_key_here",
+    "ALWAYSDATA": "true"
+  },
+  "processes": {
+    "telegram_bot": {
+      "command": "python main.py",
+      "instances": 1
+    }
+  }
+}
